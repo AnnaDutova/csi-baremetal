@@ -13,7 +13,7 @@ jobs:
     name: Validate code and charts
     runs-on: ubuntu-18.04
     container: 
-      image: anndutova/csi-baremetal-devkit:latest
+      image: ghcr.io/dell/csi-baremetal/csi-baremetal-devkit:latest
       env:
         EUID: 0
         EGID: 0
@@ -85,7 +85,7 @@ jobs:
     name: Generated files should be consistent
     runs-on: ubuntu-18.04
     container: 
-      image: anndutova/csi-baremetal-devkit:latest
+      image: ghcr.io/dell/csi-baremetal/csi-baremetal-devkit:latest
       env:
         EUID: 0
         EGID: 0
