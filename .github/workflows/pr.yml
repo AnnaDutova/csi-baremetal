@@ -5,15 +5,13 @@ on:
     branches: [ feature-devkit-pr ]
   pull_request:
     branches: [ master ]
-env:
-  go_version: '1.16.0'
-  golangci_version: '1.37.0'
+
 jobs:
   lint-test:
     name: Validate code and charts
     runs-on: ubuntu-18.04
     container: 
-      image: ghcr.io/dell/csi-baremetal/csi-baremetal-devkit:latest
+      image: anndutova/csi-baremetal-devkit:latest
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -29,6 +27,11 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@v3
+
+    - name: Set Go version variable
+      run: |
+        version = `echo "$(go version)" | grep -oE '[0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}'`
+        echo "go_version=$version" >> $GITHUB_ENV
 
     - name: Load dep cache
       uses: actions/cache@v2
@@ -88,7 +91,7 @@ jobs:
     name: Generated files should be consistent
     runs-on: ubuntu-18.04
     container: 
-      image: ghcr.io/dell/csi-baremetal/csi-baremetal-devkit:latest
+      image: anndutova/csi-baremetal-devkit:latest
       env:
         EUID: 0
         EGID: 0
@@ -103,7 +106,7 @@ jobs:
       uses: actions/checkout@v3
   
     - name: Compile proto files
-      run: make compile-proto
+      run: make install-compile-proto
 
     - name: Generate CRD
       run: |
