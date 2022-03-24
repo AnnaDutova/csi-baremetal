@@ -26,9 +26,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Set Go version variable
-      run: |
-        version = `echo "$(go version)" | grep -oE '[0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}'`
-        echo "go_version=$version" >> $GITHUB_ENV
+      run: echo "go_version=`echo "$(go version)" | grep -oE '[0-9]{1,}\.[0-9]{1,}\.[0-9]{1,}'`" >> $GITHUB_ENV
 
     - name: Load dep cache
       uses: actions/cache@v2
