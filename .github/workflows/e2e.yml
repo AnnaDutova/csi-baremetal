@@ -12,7 +12,7 @@ env:
   golangci_version: '1.44.0'
   helm_version: '3.7.1'
   kubectl_version: 'v1.22.2'
-  kind_config: 'small-kind.yaml'
+  kind_config: 'kind.yaml'
   kind_wait: '30s'
 jobs:
   e2e:
@@ -216,7 +216,7 @@ jobs:
     - name: Make test
       continue-on-error: true
       id: tests
-      run: make test-short-ci CSI_VERSION=$CSI_VERSION OPERATOR_VERSION=$CSI_OPERATOR_VERSION CHARTS_DIR=${{env.CSI_BAREMETAL_OPERATOR_DIR}}/charts
+      run: make test-ci CSI_VERSION=$CSI_VERSION OPERATOR_VERSION=$CSI_OPERATOR_VERSION CHARTS_DIR=${{env.CSI_BAREMETAL_OPERATOR_DIR}}/charts
 
     - name: Publish Unit Test Results
       if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/ci')
