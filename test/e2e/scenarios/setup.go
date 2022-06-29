@@ -52,14 +52,15 @@ var _ = utils.SIGDescribe("CSI Volumes", func() {
 	ginkgo.AfterEach(failTestIfTimeout)
 
 	ginkgo.Context(storageframework.GetDriverNameWithFeatureTags(curDriver), func() {
-		storageframework.DefineTestSuites(curDriver, CSITestSuites)
+		/*storageframework.DefineTestSuites(curDriver, CSITestSuites)
 		DefineDriveHealthChangeTestSuite(curDriver)
 		DefineControllerNodeFailTestSuite(curDriver)
 		DefineNodeRebootTestSuite(curDriver)
 		DefineStressTestSuite(curDriver)
 		DefineDifferentSCTestSuite(curDriver)
 		DefineSchedulerTestSuite(curDriver)
-		DefineLabeledDeployTestSuite()
+		DefineLabeledDeployTestSuite()*/
+		DefineNodeRemovalTestSuite(curDriver)
 	})
 })
 
