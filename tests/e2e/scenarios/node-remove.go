@@ -88,8 +88,8 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 			pods, err := e2epod.GetPodsInNamespace(f.ClientSet, f.Namespace.Name, map[string]string{})
 			framework.ExpectNoError(err)
 
-			//framework.ExpectEqual(f, len(podsBefore) < len(pods), true)
 			e2elog.Logf("before %s after %s", len(podsBefore), len(pods))
+			framework.(f, len(pods) - len(podsBefore) > 0, true)
 		}
 		common.CleanupAfterCustomTest(f, driverCleanup, []*corev1.Pod{pod}, []*corev1.PersistentVolumeClaim{pvc})
 	}
@@ -137,7 +137,7 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 		framework.ExpectNoError(err)
 
 		e2elog.Logf("Waiting for csibmnode to be deleted...")
-		for start := time.Now(); time.Since(start) < time.Minute*10; time.Sleep(time.Second * 30) {
+		for start := time.Now(); time.Since(start) < time.Minute*5; time.Sleep(time.Second * 30) {
 			if !isNodeExist(f, taintedNodeId) {
 				break
 			}
