@@ -91,7 +91,7 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 			e2elog.Logf("before %d after %d", len(podsBefore), len(pods))
 			e2elog.Logf("diff more %t", len(pods) - len(podsBefore) > 0)
 			if len(pods) - len(podsBefore) <= 0 {
-				framework.Failf("Node not ready", taintNodeName)
+				framework.Failf("Node not ready")
 			}
 			//framework.ExpectEqual(f, len(pods) > len(podsBefore), true)
 		}
