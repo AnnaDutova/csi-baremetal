@@ -19,8 +19,6 @@ package scenarios
 import (
 	"context"
 	"fmt"
-	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
-	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"time"
 
 	"github.com/onsi/ginkgo"
@@ -31,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2elog "k8s.io/kubernetes/test/e2e/framework/log"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
 	"github.com/dell/csi-baremetal-e2e-tests/e2e/common"
@@ -88,12 +88,10 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 			pods, err := e2epod.GetPodsInNamespace(f.ClientSet, f.Namespace.Name, map[string]string{})
 			framework.ExpectNoError(err)
 
-			e2elog.Logf("before %d after %d", len(podsBefore), len(pods))
-			e2elog.Logf("diff more %t", len(pods) - len(podsBefore) > 0)
+			e2elog.Logf("Count of pods before test was %d, after - %d", len(podsBefore), len(pods))
 			if len(pods) - len(podsBefore) <= 0 {
-				framework.Failf("Node not ready")
+				framework.Failf("Csi-baremetal-node not ready")
 			}
-			//framework.ExpectEqual(f, len(pods) > len(podsBefore), true)
 		}
 		common.CleanupAfterCustomTest(f, driverCleanup, []*corev1.Pod{pod}, []*corev1.PersistentVolumeClaim{pvc})
 	}
@@ -141,7 +139,7 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 		framework.ExpectNoError(err)
 
 		e2elog.Logf("Waiting for csibmnode to be deleted...")
-		for start := time.Now(); time.Since(start) < time.Minute*5; time.Sleep(time.Second * 30) {
+		for start := time.Now(); time.Since(start) < time.Minute*10; time.Sleep(time.Second * 30) {
 			if !isNodeExist(f, taintedNodeId) {
 				break
 			}
