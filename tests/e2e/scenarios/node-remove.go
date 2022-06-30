@@ -88,9 +88,9 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 			pods, err := e2epod.GetPodsInNamespace(f.ClientSet, f.Namespace.Name, map[string]string{})
 			framework.ExpectNoError(err)
 
-			e2elog.Logf("before %s after %s", len(podsBefore), len(pods))
-			e2elog.Logf("diff %s", len(pods) - len(podsBefore) > 0)
-			//framework.ExpectEqual(f, len(pods) - len(podsBefore) > 0, true)
+			e2elog.Logf("before %d after %d", len(podsBefore), len(pods))
+			e2elog.Logf("diff %d", len(pods) - len(podsBefore) > 0)
+			framework.ExpectEqual(f, len(pods) - len(podsBefore) > 0, true)
 		}
 		common.CleanupAfterCustomTest(f, driverCleanup, []*corev1.Pod{pod}, []*corev1.PersistentVolumeClaim{pvc})
 	}
