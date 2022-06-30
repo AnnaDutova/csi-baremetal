@@ -90,7 +90,10 @@ func defineNodeRemovalTest(driver *baremetalDriver) {
 
 			e2elog.Logf("before %d after %d", len(podsBefore), len(pods))
 			e2elog.Logf("diff more %t", len(pods) - len(podsBefore) > 0)
-			framework.ExpectEqual(f, len(pods) - len(podsBefore) > 0, true)
+			if len(pods) - len(podsBefore) <= 0 {
+				framework.Failf("Node not ready", taintNodeName)
+			}
+			//framework.ExpectEqual(f, len(pods) > len(podsBefore), true)
 		}
 		common.CleanupAfterCustomTest(f, driverCleanup, []*corev1.Pod{pod}, []*corev1.PersistentVolumeClaim{pvc})
 	}
