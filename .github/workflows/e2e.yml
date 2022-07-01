@@ -11,7 +11,7 @@ env:
   go_version: '1.17.7'
   golangci_version: '1.44.0'
   helm_version: '3.7.1'
-  kubectl_version: 'v1.24.0'
+  kubectl_version: 'v1.23.0'
   kind_config: 'kind.yaml'
   kind_wait: '30s'
 jobs:
