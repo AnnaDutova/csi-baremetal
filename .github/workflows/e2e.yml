@@ -11,7 +11,7 @@ env:
   go_version: '1.17.7'
   golangci_version: '1.44.0'
   helm_version: '3.7.1'
-  kubectl_version: 'v1.22.2'
+  kubectl_version: 'v1.24.0'
   kind_config: 'kind.yaml'
   kind_wait: '30s'
 jobs:
@@ -161,7 +161,7 @@ jobs:
         version: ${{ env.helm_version }}
           
     - name: Kubectl install
-      uses: azure/setup-kubectl@v1
+      uses: azure/setup-kubectl@v2.0
       with:
         version: ${{ env.kubectl_version }}
 
