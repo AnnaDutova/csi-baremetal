@@ -248,7 +248,7 @@ func (d *baremetalDriver) GetCSIDriverName(config *storageframework.PerTestConfi
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, volumeType storageframework.TestVolType) storageframework.TestVolume {
-	panic("implement me")
+	return storageframework.CreateVolume(b, config, volType)
 }
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
