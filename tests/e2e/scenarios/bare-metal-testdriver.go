@@ -19,8 +19,11 @@ package scenarios
 import (
 	"context"
 	"fmt"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"strings"
 	"time"
+
+	"github.com/dell/csi-baremetal-e2e-tests/e2e/common"
 
 	"github.com/onsi/ginkgo"
 	corev1 "k8s.io/api/core/v1"
@@ -32,12 +35,6 @@ import (
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
-	imageutils "k8s.io/kubernetes/test/utils/image"
-	clientset "k8s.io/client-go/kubernetes"
-	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
-
-	
-	"github.com/dell/csi-baremetal-e2e-tests/e2e/common"
 )
 
 type baremetalDriver struct {
@@ -252,14 +249,11 @@ func (d *baremetalDriver) GetCSIDriverName(config *storageframework.PerTestConfi
 
 type CSIVolume struct {
 	serverPod *corev1.Pod
-	serverIP  string
 	f         *framework.Framework
-	iqn       string
 }
 
 func (v *CSIVolume) DeleteVolume() {
-	cs := v.f.ClientSet
-	err := e2epod.DeletePodWithWait(cs, v.serverPod)
+	err := e2epod.DeletePodWithWait(v.f.ClientSet, v.serverPod)
 	if err != nil {
 		framework.Logf("Server pod delete failed: %v", err)
 	}
@@ -268,49 +262,29 @@ func (v *CSIVolume) DeleteVolume() {
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, volumeType storageframework.TestVolType) storageframework.TestVolume {
 	f := config.Framework
-	cs := f.ClientSet
-	ns := f.Namespace
+	ns := f.Namespace.Name
 
-	c, serverPod, serverIP, iqn := newCSIServer(cs, ns.Name)
-	config.ServerConfig = &c
-	config.ClientNodeSelection = c.ClientNodeSelection
-	return &CSIVolume{
-		serverPod: serverPod,
-		serverIP:  serverIP,
-		iqn:       iqn,
-		f:         f,
+	switch volumeType {
+	case storageframework.PreprovisionedPV:
+		framework.Logf("VolumeType: %s", volumeType)
+		pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(ns).Create(context.TODO(),
+			constructPVC(ns, d.GetClaimSize(), "some class sssss", pvcName),
+			metav1.CreateOptions{})
+		framework.ExpectNoError(err)
+
+		pod, err := common.CreatePod(f.ClientSet, ns, nil, []*corev1.PersistentVolumeClaim{pvc},
+			false, "sleep 3600")
+		framework.ExpectNoError(err)
+
+		return &CSIVolume{
+			serverPod: pod,
+			f:         f,
+		}
+	default:
+		framework.Logf("Server dont know how to work with this tupy %s", volumeType)
 	}
+	return nil
 	//panic("implement me")
-}
-
-const (
-	// Template for iSCSI IQN.
-	iSCSIIQNTemplate = "iqn.2003-01.io.k8s:e2e.%s"
-)
-
-func newCSIServer(cs clientset.Interface, namespace string) (config e2evolume.TestConfig, pod *corev1.Pod, ip, iqn string) {
-	// Generate cluster-wide unique IQN
-	iqn = fmt.Sprintf(iSCSIIQNTemplate, namespace)
-	config = e2evolume.TestConfig{
-		Namespace:   namespace,
-		Prefix:      "iscsi",
-		ServerImage: imageutils.GetE2EImage(imageutils.VolumeISCSIServer),
-		ServerArgs:  []string{iqn},
-		ServerVolumes: map[string]string{
-			// iSCSI container needs to insert modules from the host
-			"/lib/modules": "/lib/modules",
-			// iSCSI container needs to configure kernel
-			"/sys/kernel": "/sys/kernel",
-			// iSCSI source "block devices" must be available on the host
-			"/srv/iscsi": "/srv/iscsi",
-		},
-		ServerReadyMessage: "iscsi target started",
-		ServerHostNetwork:  true,
-	}
-	pod, ip = e2evolume.CreateStorageServer(cs, config)
-	// Make sure the client runs on the same node as server so we don't need to open any firewalls.
-	config.ClientNodeSelection = e2epod.NodeSelection{Name: pod.Spec.NodeName}
-	return config, pod, ip, iqn
 }
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
@@ -326,13 +300,8 @@ func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string
 	}
 	return &pvSource, nil*/
 
-	iv, ok := testVolume.(*CSIVolume)
-	framework.ExpectEqual(ok, true, "Failed to cast test volume to iSCSI test volume")
-
 	pvSource := corev1.PersistentVolumeSource{
 		ISCSI: &corev1.ISCSIPersistentVolumeSource{
-			IQN:      iv.iqn,
-			Lun:      0,
 			ReadOnly: readOnly,
 			FSType:   fsType,
 		},
