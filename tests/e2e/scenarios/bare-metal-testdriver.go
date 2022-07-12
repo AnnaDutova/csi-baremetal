@@ -267,6 +267,7 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	framework.Logf("VolumeType: %s", volumeType)
 	switch volumeType {
 	case storageframework.PreprovisionedPV:
+		framework.Logf("In case VolumeType: %s", volumeType)
 		pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(ns).Create(context.TODO(),
 			constructPVC(ns, d.GetClaimSize(), "some class sssss", pvcName),
 			metav1.CreateOptions{})
