@@ -268,8 +268,8 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	switch volumeType {
 	case storageframework.PreprovisionedPV:
 		framework.Logf("In case VolumeType: %s", volumeType)
-		k8sSC = driver.GetDynamicProvisionStorageClass(perTestConf, "xfs")
-		k8sSC, err = f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(), k8sSC, metav1.CreateOptions{})
+		k8sSC := driver.GetDynamicProvisionStorageClass(perTestConf, "xfs")
+		k8sSC, err := f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(), k8sSC, metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
 		pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(ns).Create(context.TODO(),
