@@ -264,51 +264,46 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	f := config.Framework
 	ns := f.Namespace.Name
 
+	framework.Logf("VolumeType: %s", volumeType)
 	switch volumeType {
 	case storageframework.PreprovisionedPV:
-		framework.Logf("VolumeType: %s", volumeType)
 		pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(ns).Create(context.TODO(),
 			constructPVC(ns, d.GetClaimSize(), "some class sssss", pvcName),
 			metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
+		framework.Logf("Create PVC: %s", pvc.Name)
+
+		executor := common.GetExecutor()
+		_, _, err = executor.RunCmd("kubectl get pvc --all-namespaces")
+		framework.ExpectNoError(err)
+
 		pod, err := common.CreatePod(f.ClientSet, ns, nil, []*corev1.PersistentVolumeClaim{pvc},
 			false, "sleep 3600")
 		framework.ExpectNoError(err)
-
+		
+		framework.Logf("Create Pod: %s", pod.Name)
+		
 		return &CSIVolume{
 			serverPod: pod,
 			f:         f,
 		}
 	default:
-		framework.Logf("Server dont know how to work with this tupy %s", volumeType)
+		framework.Failf("Unsupported volType: %v is specified", volumeType)
 	}
 	return nil
-	//panic("implement me")
 }
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string, testVolume storageframework.TestVolume) (*corev1.PersistentVolumeSource, *corev1.VolumeNodeAffinity) {
-	/*pvSource := corev1.PersistentVolumeSource{
-		CSI: &corev1.CSIPersistentVolumeSource{
-			Driver:           d.GetDriverInfo().Name,
-			VolumeHandle:     "some-handle",
-			ReadOnly:         readOnly,
-			FSType:           fsType,
-			VolumeAttributes: map[string]string{},
-		},
-	}
-	return &pvSource, nil*/
-
 	pvSource := corev1.PersistentVolumeSource{
-		ISCSI: &corev1.ISCSIPersistentVolumeSource{
+		CSI: &corev1.CSIPersistentVolumeSource{
+			Driver:   d.GetDriverInfo().Name,
 			ReadOnly: readOnly,
 			FSType:   fsType,
 		},
 	}
 	return &pvSource, nil
-
-	//panic("implement me")
 }
 
 // constructDefaultLoopbackConfig constructs default ConfigMap for LoopBackManager
