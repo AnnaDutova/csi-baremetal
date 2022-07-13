@@ -19,6 +19,7 @@ package scenarios
 import (
 	"context"
 	"fmt"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"strings"
 	"time"
 
@@ -247,34 +248,49 @@ func (d *baremetalDriver) GetCSIDriverName(config *storageframework.PerTestConfi
 }
 
 type CSIVolume struct {
-	serverVol *corev1.Volume
+	serverPod *corev1.Pod
 	f         *framework.Framework
+	serverIP  string
+	iqn       string
 }
 
 func (v *CSIVolume) DeleteVolume() {
-	executor := common.GetExecutor()
-	_, _, err := executor.RunCmd(fmt.Sprintf("kubectl delete volume %s", v.serverVol.Name))
-	framework.ExpectNoError(err)
+	cs := v.f.ClientSet
+
+	framework.Logf("Deleting server pod %q...", v.serverPod.Name)
+	err := e2epod.DeletePodWithWait(cs, v.serverPod)
+	if err != nil {
+		framework.Logf("Server pod delete failed: %v", err)
+	}
 }
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, volumeType storageframework.TestVolType) storageframework.TestVolume {
 	f := config.Framework
+	ns := f.Namespace.Name
 
-	switch volumeType {
-	case storageframework.PreprovisionedPV:
-		k8sSC, err := f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(),
-			d.GetDynamicProvisionStorageClass(config, "ext4"), metav1.CreateOptions{})
-		framework.ExpectNoError(err)
-		
-		return &CSIVolume{
-			serverVol: constructVolume(d, k8sSC.Name),
-			f:         f,
-		}
-	default:
-		framework.Failf("Unsupported volType: %v is specified", volumeType)
+	iqn := fmt.Sprintf("create-volume-%s", ns)
+	testConfig := e2evolume.TestConfig{
+		Namespace:         ns,
+		Prefix:            "csi-baremetal",
+		ServerImage:       "nginx",
+		ServerArgs:        []string{iqn},
+		ServerHostNetwork: true,
 	}
-	return nil
+
+	pod, ip := e2evolume.CreateStorageServer(f.ClientSet, testConfig)
+
+	testConfig.ClientNodeSelection = e2epod.NodeSelection{Name: pod.Spec.NodeName}
+
+	config.ServerConfig = &testConfig
+	config.ClientNodeSelection = testConfig.ClientNodeSelection
+
+	return &CSIVolume{
+		serverPod: pod,
+		f:         f,
+		serverIP:  ip,
+		iqn:       iqn,
+	}
 }
 
 func constructVolume(d *baremetalDriver, volumeName string) *corev1.Volume {
