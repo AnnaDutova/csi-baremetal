@@ -248,7 +248,7 @@ func (d *baremetalDriver) GetCSIDriverName(config *storageframework.PerTestConfi
 }
 
 type CSIVolume struct {
-	serverPod *corev1.Pod
+	serverVol *corev1.volume
 	f         *framework.Framework
 }
 
@@ -264,39 +264,41 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	f := config.Framework
 	ns := f.Namespace.Name
 
-	framework.Logf("VolumeType: %s", volumeType)
 	switch volumeType {
 	case storageframework.PreprovisionedPV:
-		framework.Logf("In case VolumeType: %s", volumeType)
 		k8sSC, err := f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(), 
 		d.GetDynamicProvisionStorageClass(config, "ext4"), metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(ns).Create(context.TODO(),
-			constructPVC(ns, d.GetClaimSize(), k8sSC.Name, pvcName),
-			metav1.CreateOptions{})
+		vol, err := f.ClientSet.CoreV1().Volume(ns).Create(context.TODO(), constructVolume("vol"), metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
-		framework.Logf("Create PVC: %s", pvc.Name)
+		framework.Logf("Create vol: %s", vol.Name)
 
 		executor := common.GetExecutor()
-		_, _, err = executor.RunCmd("kubectl get pvc --all-namespaces")
+		_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
 		framework.ExpectNoError(err)
-
-		pod, err := common.CreatePod(f.ClientSet, ns, nil, []*corev1.PersistentVolumeClaim{pvc},
-			false, "sleep 3600")
-		framework.ExpectNoError(err)
-		
-		framework.Logf("Create Pod: %s", pod.Name)
 		
 		return &CSIVolume{
-			serverPod: pod,
+			volume: vol, 
 			f:         f,
 		}
 	default:
 		framework.Failf("Unsupported volType: %v is specified", volumeType)
 	}
 	return nil
+}
+
+func constructVolume(volumeName string) *corev1.Volume {
+	vol := corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			CSI: corev1.CSIVolumeSource{
+				Driver:   d.GetDriverInfo().Name,
+			},
+		},
+	}
+	return &vol
 }
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
