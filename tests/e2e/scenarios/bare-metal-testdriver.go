@@ -136,8 +136,8 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 	}
 
 	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
-	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (xfs)" {
-		e2eskipper.Skipf("Skip preprovisioning tests for diff from xfs fsTypes -- skipping")
+	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (ext4)" {
+		e2eskipper.Skipf("Skip preprovisioning tests for diff from ext4 fsTypes -- skipping")
 	}
 }
 
@@ -269,7 +269,7 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	case storageframework.PreprovisionedPV:
 		framework.Logf("In case VolumeType: %s", volumeType)
 		k8sSC, err := f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(), 
-		d.GetDynamicProvisionStorageClass(config, "xfs"), metav1.CreateOptions{})
+		d.GetDynamicProvisionStorageClass(config, "ext4"), metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 
 		pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(ns).Create(context.TODO(),
