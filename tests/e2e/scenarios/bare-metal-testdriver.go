@@ -136,9 +136,9 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 	}
 
 	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
-	/*if pattern.VolType == storageframework.PreprovisionedPV {
-		e2eskipper.Skipf("Baremetal Driver does not have PreprovisionedPV test suite implemented yet -- skipping")
-	}*/
+	if pattern.VolType == storageframework.DynamicPV {
+		e2eskipper.Skipf("Baremetal Driver does not have Dynamic PV test suite implemented yet -- skipping")
+	}
 }
 
 // PrepareCSI deploys CSI and enables logging for containers
