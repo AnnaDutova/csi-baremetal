@@ -136,8 +136,8 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 	}
 
 	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
-	if pattern.VolType == storageframework.DynamicPV {
-		e2eskipper.Skipf("Baremetal Driver does not have Dynamic PV test suite implemented yet -- skipping")
+	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (xfs)" {
+		e2eskipper.Skipf("Skip preprovisioning tests for diff from xfs fsTypes -- skipping")
 	}
 }
 
