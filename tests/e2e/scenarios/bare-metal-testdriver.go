@@ -19,7 +19,6 @@ package scenarios
 import (
 	"context"
 	"fmt"
-	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"strings"
 	"time"
 
@@ -135,8 +134,8 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 		e2eskipper.Skipf("Baremetal Driver does not support block volume mode with volume expansion - skipping")
 	}
 
-	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage 
-	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (ext4)" || pattern.VolType ==  storageframework.DynamicPV {
+	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
+	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (ext4)" || pattern.VolType == storageframework.DynamicPV {
 		e2eskipper.Skipf("Skip preprovisioning tests for diff from ext4 fsTypes -- skipping")
 	}
 }
@@ -248,39 +247,28 @@ func (d *baremetalDriver) GetCSIDriverName(config *storageframework.PerTestConfi
 }
 
 type CSIVolume struct {
-	serverVol *corev1.volume
+	serverVol *corev1.Volume
 	f         *framework.Framework
 }
 
 func (v *CSIVolume) DeleteVolume() {
-	err := e2epod.DeletePodWithWait(v.f.ClientSet, v.serverPod)
-	if err != nil {
-		framework.Logf("Server pod delete failed: %v", err)
-	}
+	executor := common.GetExecutor()
+	_, _, err := executor.RunCmd(fmt.Sprintf("kubectl delete volume %s", v.serverVol.Name))
+	framework.ExpectNoError(err)
 }
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, volumeType storageframework.TestVolType) storageframework.TestVolume {
 	f := config.Framework
-	ns := f.Namespace.Name
 
 	switch volumeType {
 	case storageframework.PreprovisionedPV:
-		k8sSC, err := f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(), 
-		d.GetDynamicProvisionStorageClass(config, "ext4"), metav1.CreateOptions{})
-		framework.ExpectNoError(err)
-
-		vol, err := f.ClientSet.CoreV1().Volume(ns).Create(context.TODO(), constructVolume("vol"), metav1.CreateOptions{})
-		framework.ExpectNoError(err)
-
-		framework.Logf("Create vol: %s", vol.Name)
-
-		executor := common.GetExecutor()
-		_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
+		k8sSC, err := f.ClientSet.StorageV1().StorageClasses().Create(context.TODO(),
+			d.GetDynamicProvisionStorageClass(config, "ext4"), metav1.CreateOptions{})
 		framework.ExpectNoError(err)
 		
 		return &CSIVolume{
-			volume: vol, 
+			serverVol: constructVolume(d, k8sSC.Name),
 			f:         f,
 		}
 	default:
@@ -289,12 +277,12 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	return nil
 }
 
-func constructVolume(volumeName string) *corev1.Volume {
+func constructVolume(d *baremetalDriver, volumeName string) *corev1.Volume {
 	vol := corev1.Volume{
 		Name: volumeName,
 		VolumeSource: corev1.VolumeSource{
-			CSI: corev1.CSIVolumeSource{
-				Driver:   d.GetDriverInfo().Name,
+			CSI: &corev1.CSIVolumeSource{
+				Driver: d.GetDriverInfo().Name,
 			},
 		},
 	}
@@ -305,10 +293,10 @@ func constructVolume(volumeName string) *corev1.Volume {
 func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string, testVolume storageframework.TestVolume) (*corev1.PersistentVolumeSource, *corev1.VolumeNodeAffinity) {
 	pvSource := corev1.PersistentVolumeSource{
 		CSI: &corev1.CSIPersistentVolumeSource{
-			Driver:   d.GetDriverInfo().Name,
-			ReadOnly: readOnly,
+			Driver:       d.GetDriverInfo().Name,
+			ReadOnly:     readOnly,
 			VolumeHandle: "csi-baremetal",
-			FSType:   fsType,
+			FSType:       fsType,
 		},
 	}
 	return &pvSource, nil
