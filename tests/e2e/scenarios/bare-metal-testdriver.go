@@ -305,6 +305,7 @@ func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string
 		CSI: &corev1.CSIPersistentVolumeSource{
 			Driver:   d.GetDriverInfo().Name,
 			ReadOnly: readOnly,
+			VolumeHandle: "csi-baremetal",
 			FSType:   fsType,
 		},
 	}
