@@ -147,9 +147,7 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 	}
 
 	if pattern.VolType == storageframework.DynamicPV {
-		if pattern.FsType == xfsFs || pattern.FsType == "" || pattern.FsType == ext3Fs {
-			e2eskipper.Skipf("Skip tests in CI already test for ext4 fs -- skipping")
-		}
+		e2eskipper.Skipf("Skip tests for dynamicPV -- skipping")
 	}
 }
 
