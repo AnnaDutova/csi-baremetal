@@ -147,9 +147,9 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 		}
 	}
 
-	/*if pattern.VolType == storageframework.DynamicPV {
+	if pattern.VolType == storageframework.DynamicPV {
 		e2eskipper.Skipf("Skip tests for dynamicPV -- skipping")
-	}*/
+	}
 }
 
 // PrepareCSI deploys CSI and enables logging for containers
