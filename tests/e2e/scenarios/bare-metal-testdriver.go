@@ -267,6 +267,7 @@ func (v *CSIVolume) DeleteVolume() {
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, volumeType storageframework.TestVolType) storageframework.TestVolume {
+	panic("implement me")
 	f := config.Framework
 	ns := f.Namespace.Name
 
@@ -369,6 +370,7 @@ func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string, testVolume storageframework.TestVolume) (*corev1.PersistentVolumeSource, *corev1.VolumeNodeAffinity) {
+	panic("implement me")
 	pvSource := corev1.PersistentVolumeSource{
 		CSI: &corev1.CSIPersistentVolumeSource{
 			Driver:       d.GetDriverInfo().Name,
