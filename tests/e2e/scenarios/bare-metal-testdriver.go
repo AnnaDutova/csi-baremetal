@@ -369,22 +369,27 @@ func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string, testVolume storageframework.TestVolume) (*corev1.PersistentVolumeSource, *corev1.VolumeNodeAffinity) {
-	panic("implement me")
-	pvSource := corev1.PersistentVolumeSource{
-		CSI: &corev1.CSIPersistentVolumeSource{
-			Driver:       d.GetDriverInfo().Name,
-			ReadOnly:     readOnly,
-			VolumeHandle: volName,
-			VolumeAttributes: map[string]string{
-				"csi.storage.k8s.io/pv/name":       volName,
-				"csi.storage.k8s.io/pvc/namespace": namespace,
-				"fsType":                           ext4Fs,
-				"storageType":                      hddStorageType,
+	//panic("implement me")
+	e2elog.Logf("Volume state %s", testVolume)
+	if volName != "vol-name" {
+		pvSource := corev1.PersistentVolumeSource{
+			CSI: &corev1.CSIPersistentVolumeSource{
+				Driver:       d.GetDriverInfo().Name,
+				ReadOnly:     readOnly,
+				VolumeHandle: volName,
+				VolumeAttributes: map[string]string{
+					"csi.storage.k8s.io/pv/name":       volName,
+					"csi.storage.k8s.io/pvc/namespace": namespace,
+					"fsType":                           ext4Fs,
+					"storageType":                      hddStorageType,
+				},
+				FSType: fsType,
 			},
-			FSType: fsType,
-		},
+		}
+		return &pvSource, nil
+	} else{
+		return nil, nil
 	}
-	return &pvSource, nil
 }
 
 // constructDefaultLoopbackConfig constructs default ConfigMap for LoopBackManager
