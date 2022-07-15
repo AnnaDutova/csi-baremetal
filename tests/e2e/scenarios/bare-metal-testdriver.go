@@ -139,16 +139,15 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 		e2eskipper.Skipf("Baremetal Driver does not support block volume mode with volume expansion - skipping")
 	}
 
-	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
 	if pattern.VolType == storageframework.PreprovisionedPV {
-		if pattern.FsType == xfsFs || pattern.FsType == ext3Fs || pattern.FsType == ext3Fs {
+		if pattern.FsType == xfsFs || pattern.FsType == ext3Fs {
 			e2eskipper.Skipf("Skip tests in CI already test for default fs e -- skipping")
 		}
 	}
 
-	/*if pattern.VolType == storageframework.DynamicPV {
-		e2eskipper.Skipf("Skip tests for dynamicPV -- skipping")
-	}*/
+	if pattern.VolType == storageframework.DynamicPV {
+		e2eskipper.Skipf("Skip tests for DynamicPV -- skipping")
+	}
 }
 
 // PrepareCSI deploys CSI and enables logging for containers
@@ -276,6 +275,9 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	f := config.Framework
 	ns := f.Namespace.Name
 
+	var driveUUID, driveNodeID string
+	var volumeSize int64
+
 	list := getUObjList(f, common.ACGVR)
 	for _, el := range list.Items {
 		e2elog.Logf("AC el - %s", el)
@@ -283,17 +285,27 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 		acSize, _, _ := unstructured.NestedInt64(el.UnstructuredContent(), "spec", "Size")
 		e2elog.Logf("acLocation - %s", acLocation)
 		e2elog.Logf("acSize - %d", acSize)
+		if acSize >= 1024*1024*101 {
+			driveUUID = acLocation
+			volumeSize = acSize
+			break
+		}
 	}
+
 	drives := getUObjList(f, common.DriveGVR)
 	for _, el := range drives.Items {
 		e2elog.Logf("Print drive - %s", el)
-		driveUUID, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "UUID")
+		tempDriveUUID, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "UUID")
 		driveNode, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "NodeId")
-		e2elog.Logf("drive UUID - %s", driveUUID)
+		e2elog.Logf("drive UUID - %s", tempDriveUUID)
 		e2elog.Logf("drive NodeID- %s", driveNode)
+		if tempDriveUUID == driveUUID {
+			driveNodeID = driveNode
+			break
+		}
 	}
 
-	testVol := constructVolume(drives.Items[0], ns)
+	testVol := constructVolume(volumeSize, driveUUID, driveNodeID, ns)
 	vol, err := config.Framework.DynamicClient.Resource(common.VolumeGVR).Namespace(ns).Create(context.TODO(), testVol, metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
@@ -320,11 +332,8 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	}
 }
 
-func constructVolume(drive unstructured.Unstructured, ns string) *unstructured.Unstructured {
+func constructVolume(size int64, driveUUID, driveNode, ns string) *unstructured.Unstructured {
 	volUUID := fmt.Sprintf("pvc-%s", uuid.New().String())
-	driveUUID, _, _ := unstructured.NestedString(drive.UnstructuredContent(), "spec", "UUID")
-	driveNode, _, _ := unstructured.NestedString(drive.UnstructuredContent(), "spec", "NodeId")
-	var size int64 = 105906176
 	testVol := unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "csi-baremetal.dell.com/v1",
@@ -345,7 +354,7 @@ func constructVolume(drive unstructured.Unstructured, ns string) *unstructured.U
 				"OperationalStatus": "OPERATIVE",
 				"Size":              size,
 				"StorageClass":      hddStorageType,
-				"Type":              "",
+				"Type":              ext4Fs,
 				"Usage":             "IN_USE",
 			},
 		},
@@ -375,27 +384,21 @@ func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string, testVolume storageframework.TestVolume) (*corev1.PersistentVolumeSource, *corev1.VolumeNodeAffinity) {
-	//panic("implement me")
-	e2elog.Logf("Volume state %s", testVolume)
-	if volName != "vol-name" {
-		pvSource := corev1.PersistentVolumeSource{
-			CSI: &corev1.CSIPersistentVolumeSource{
-				Driver:       d.GetDriverInfo().Name,
-				ReadOnly:     readOnly,
-				VolumeHandle: volName,
-				VolumeAttributes: map[string]string{
-					"csi.storage.k8s.io/pv/name":       volName,
-					"csi.storage.k8s.io/pvc/namespace": namespace,
-					"fsType":                           "",
-					"storageType":                      hddStorageType,
-				},
-				FSType: fsType,
+	pvSource := corev1.PersistentVolumeSource{
+		CSI: &corev1.CSIPersistentVolumeSource{
+			Driver:       d.GetDriverInfo().Name,
+			ReadOnly:     readOnly,
+			VolumeHandle: volName,
+			VolumeAttributes: map[string]string{
+				"csi.storage.k8s.io/pv/name":       volName,
+				"csi.storage.k8s.io/pvc/namespace": namespace,
+				"fsType":                           ext4Fs,
+				"storageType":                      hddStorageType,
 			},
-		}
-		return &pvSource, nil
-	} else{
-		return nil, nil
+			FSType: fsType,
+		},
 	}
+	return &pvSource, nil
 }
 
 // constructDefaultLoopbackConfig constructs default ConfigMap for LoopBackManager
