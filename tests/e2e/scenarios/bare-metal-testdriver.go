@@ -52,9 +52,10 @@ var (
 	ext3Fs                    = "ext3"
 	hddStorageType            = "HDD"
 	// default value for expansion is hardcoded to 1Gi in e2e test framework
-	maxDriveSize = "2.1Gi"
-	namespace    = "volume"
-	volName      = "vol-name"
+	maxDriveSize  = "2.1Gi"
+	defaultACSize = int64(1024 * 1024 * 101)
+	namespace     = "volume"
+	volName       = "vol-name"
 )
 
 func initBaremetalDriverInfo(name string) storageframework.DriverInfo {
@@ -139,15 +140,16 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 		e2eskipper.Skipf("Baremetal Driver does not support block volume mode with volume expansion - skipping")
 	}
 
+	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
 	if pattern.VolType == storageframework.PreprovisionedPV {
-		if pattern.FsType == xfsFs || pattern.FsType == ext3Fs {
+		if pattern.FsType == xfsFs || pattern.FsType == "" || pattern.FsType == ext3Fs {
 			e2eskipper.Skipf("Skip tests in CI already test for default fs e -- skipping")
 		}
 	}
 
-	if pattern.VolType == storageframework.DynamicPV {
-		e2eskipper.Skipf("Skip tests for DynamicPV -- skipping")
-	}
+	/*if pattern.VolType == storageframework.DynamicPV {
+		e2eskipper.Skipf("Skip tests for dynamicPV -- skipping")
+	}*/
 }
 
 // PrepareCSI deploys CSI and enables logging for containers
@@ -265,9 +267,6 @@ func (v *CSIVolume) DeleteVolume() {
 	framework.Logf("Delete volume %s", v.volName)
 	err := v.f.DynamicClient.Resource(common.VolumeGVR).Namespace(v.f.Namespace.Name).Delete(context.TODO(), v.volName, metav1.DeleteOptions{})
 	framework.ExpectNoError(err)
-	executor := common.GetExecutor()
-	_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
-	framework.ExpectNoError(err)
 }
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
@@ -275,56 +274,18 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	f := config.Framework
 	ns := f.Namespace.Name
 
-	var driveUUID, driveNodeID string
-	var volumeSize int64
-
-	list := getUObjList(f, common.ACGVR)
-	for _, el := range list.Items {
-		e2elog.Logf("AC el - %s", el)
-		acLocation, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "Location")
-		acSize, _, _ := unstructured.NestedInt64(el.UnstructuredContent(), "spec", "Size")
-		e2elog.Logf("acLocation - %s", acLocation)
-		e2elog.Logf("acSize - %d", acSize)
-		if acSize >= 1024*1024*101 {
-			driveUUID = acLocation
-			volumeSize = acSize
-			break
-		}
-	}
-
-	drives := getUObjList(f, common.DriveGVR)
-	for _, el := range drives.Items {
-		e2elog.Logf("Print drive - %s", el)
-		tempDriveUUID, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "UUID")
-		driveNode, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "NodeId")
-		e2elog.Logf("drive UUID - %s", tempDriveUUID)
-		e2elog.Logf("drive NodeID- %s", driveNode)
-		if tempDriveUUID == driveUUID {
-			driveNodeID = driveNode
-			break
-		}
-	}
-
-	testVol := constructVolume(volumeSize, driveUUID, driveNodeID, ns)
-	vol, err := config.Framework.DynamicClient.Resource(common.VolumeGVR).Namespace(ns).Create(context.TODO(), testVol, metav1.CreateOptions{})
+	driveUUID, driveNodeID, volumeSize := foundAvailableDrive(f)
+	vol, err := config.Framework.DynamicClient.Resource(common.VolumeGVR).Namespace(ns).Create(context.TODO(),
+		constructVolume(volumeSize, driveUUID, driveNodeID, ns), metav1.CreateOptions{})
 	framework.ExpectNoError(err)
 
-	e2elog.Logf("Vol name - %s", vol)
-
-	executor := common.GetExecutor()
-	_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
-	framework.ExpectNoError(err)
-
-	name, _, _ := unstructured.NestedString(testVol.UnstructuredContent(), "metadata", "name")
+	name, _, _ := unstructured.NestedString(vol.UnstructuredContent(), "metadata", "name")
 	volName = name
 	namespace = ns
 
 	if !waitCreatedVolumeStatus(f, name) {
-		framework.Failf("Volume stucks in CREATING state")
+		framework.Failf("The volume didn't receive the CREATED status")
 	}
-
-	_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
-	framework.ExpectNoError(err)
 
 	return &CSIVolume{
 		volName: name,
@@ -363,7 +324,6 @@ func constructVolume(size int64, driveUUID, driveNode, ns string) *unstructured.
 }
 
 func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
-	e2elog.Logf("Wait vol status CREATED")
 	var csiStatus string
 	for start := time.Now(); time.Since(start) < time.Minute*5; time.Sleep(time.Second * 2) {
 		vols := getUObjList(f, common.VolumeGVR)
@@ -374,12 +334,45 @@ func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
 				break
 			}
 		}
-		e2elog.Logf("Wait vol status CREATED - now %s", csiStatus)
+		e2elog.Logf("Wait volume status CREATED, now %s", csiStatus)
 		if csiStatus == "CREATED" {
+			return true
+		}
+	}
+	return false
+}
+
+func foundAvailableDrive(f *framework.Framework) (string, string, int64) {
+	var driveUUID, driveNodeID string
+	var volumeSize int64
+
+	list := getUObjList(f, common.ACGVR)
+	for _, el := range list.Items {
+		e2elog.Logf("AC el - %s", el)
+		acLocation, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "Location")
+		acSize, _, _ := unstructured.NestedInt64(el.UnstructuredContent(), "spec", "Size")
+		e2elog.Logf("acLocation - %s", acLocation)
+		e2elog.Logf("acSize - %d", acSize)
+		if acSize >= defaultACSize {
+			driveUUID = acLocation
+			volumeSize = acSize
 			break
 		}
 	}
-	return csiStatus == "CREATED"
+
+	drives := getUObjList(f, common.DriveGVR)
+	for _, el := range drives.Items {
+		e2elog.Logf("Print drive - %s", el)
+		tempDriveUUID, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "UUID")
+		driveNode, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "NodeId")
+		e2elog.Logf("drive UUID - %s", tempDriveUUID)
+		e2elog.Logf("drive NodeID- %s", driveNode)
+		if tempDriveUUID == driveUUID {
+			driveNodeID = driveNode
+			break
+		}
+	}
+	return driveUUID, driveNodeID, volumeSize
 }
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
