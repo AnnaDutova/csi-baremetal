@@ -19,7 +19,9 @@ package scenarios
 import (
 	"context"
 	"fmt"
-	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	"github.com/google/uuid"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	e2elog "k8s.io/kubernetes/test/e2e/framework/log"
 	"strings"
 	"time"
 
@@ -51,6 +53,8 @@ var (
 	hddStorageType            = "HDD"
 	// default value for expansion is hardcoded to 1Gi in e2e test framework
 	maxDriveSize = "2.1Gi"
+	namespace    = "volume"
+	volName      = "vol-name"
 )
 
 func initBaremetalDriverInfo(name string) storageframework.DriverInfo {
@@ -136,8 +140,8 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 	}
 
 	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
-	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (ext4)" || pattern.VolType == storageframework.DynamicPV {
-		e2eskipper.Skipf("Skip preprovisioning tests for diff from ext4 fsTypes -- skipping")
+	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (ext4)" {
+		e2eskipper.Skipf("Skip PreprovisionedPV tests for this FSType -- skipping")
 	}
 }
 
@@ -248,20 +252,17 @@ func (d *baremetalDriver) GetCSIDriverName(config *storageframework.PerTestConfi
 }
 
 type CSIVolume struct {
-	serverPod *corev1.Pod
-	f         *framework.Framework
-	serverIP  string
-	iqn       string
+	volName string
+	f       *framework.Framework
 }
 
 func (v *CSIVolume) DeleteVolume() {
-	cs := v.f.ClientSet
-
-	framework.Logf("Deleting server pod %q...", v.serverPod.Name)
-	err := e2epod.DeletePodWithWait(cs, v.serverPod)
-	if err != nil {
-		framework.Logf("Server pod delete failed: %v", err)
-	}
+	framework.Logf("Delete volume %s", v.volName)
+	err := v.f.DynamicClient.Resource(common.VolumeGVR).Namespace(v.f.Namespace.Name).Delete(context.TODO(), v.volName, metav1.DeleteOptions{})
+	framework.ExpectNoError(err)
+	executor := common.GetExecutor()
+	_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
+	framework.ExpectNoError(err)
 }
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
@@ -269,40 +270,101 @@ func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, v
 	f := config.Framework
 	ns := f.Namespace.Name
 
-	iqn := fmt.Sprintf("create-volume-%s", ns)
-	testConfig := e2evolume.TestConfig{
-		Namespace:         ns,
-		Prefix:            "csi-baremetal",
-		ServerImage:       "nginx",
-		ServerArgs:        []string{iqn},
-		ServerHostNetwork: true,
+	list := getUObjList(f, common.ACGVR)
+	for _, el := range list.Items {
+		e2elog.Logf("AC el - %s", el)
+		acLocation, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "Location")
+		acSize, _, _ := unstructured.NestedInt64(el.UnstructuredContent(), "spec", "Size")
+		e2elog.Logf("acLocation - %s", acLocation)
+		e2elog.Logf("acSize - %d", acSize)
+	}
+	drives := getUObjList(f, common.DriveGVR)
+	for _, el := range drives.Items {
+		e2elog.Logf("Print drive - %s", el)
+		driveUUID, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "UUID")
+		driveNode, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "NodeId")
+		e2elog.Logf("drive UUID - %s", driveUUID)
+		e2elog.Logf("drive NodeID- %s", driveNode)
 	}
 
-	pod, ip := e2evolume.CreateStorageServer(f.ClientSet, testConfig)
+	testVol := constructVolume(drives.Items[0], ns)
+	vol, err := config.Framework.DynamicClient.Resource(common.VolumeGVR).Namespace(ns).Create(context.TODO(), testVol, metav1.CreateOptions{})
+	framework.ExpectNoError(err)
 
-	testConfig.ClientNodeSelection = e2epod.NodeSelection{Name: pod.Spec.NodeName}
+	e2elog.Logf("Vol name - %s", vol)
 
-	config.ServerConfig = &testConfig
-	config.ClientNodeSelection = testConfig.ClientNodeSelection
+	executor := common.GetExecutor()
+	_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
+	framework.ExpectNoError(err)
+
+	name, _, _ := unstructured.NestedString(testVol.UnstructuredContent(), "metadata", "name")
+	volName = name
+	namespace = ns
+
+	if !waitCreatedVolumeStatus(f, name) {
+		framework.Failf("Volume stucks in CREATING state")
+	}
+
+	_, _, err = executor.RunCmd("kubectl get volume --all-namespaces")
+	framework.ExpectNoError(err)
 
 	return &CSIVolume{
-		serverPod: pod,
-		f:         f,
-		serverIP:  ip,
-		iqn:       iqn,
+		volName: name,
+		f:       f,
 	}
 }
 
-func constructVolume(d *baremetalDriver, volumeName string) *corev1.Volume {
-	vol := corev1.Volume{
-		Name: volumeName,
-		VolumeSource: corev1.VolumeSource{
-			CSI: &corev1.CSIVolumeSource{
-				Driver: d.GetDriverInfo().Name,
+func constructVolume(drive unstructured.Unstructured, ns string) *unstructured.Unstructured {
+	volUUID := fmt.Sprintf("pvc-%s", uuid.New().String())
+	driveUUID, _, _ := unstructured.NestedString(drive.UnstructuredContent(), "spec", "UUID")
+	driveNode, _, _ := unstructured.NestedString(drive.UnstructuredContent(), "spec", "NodeId")
+	var size int64 = 105906176
+	testVol := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "csi-baremetal.dell.com/v1",
+			"kind":       "Volume",
+			"metadata": map[string]interface{}{
+				"finalizers": []string{"dell.emc.csi/volume-cleanup"},
+				"name":       volUUID,
+				"namespace":  ns,
+			},
+			"spec": map[string]interface{}{
+				"CSIStatus":         "CREATING",
+				"Health":            "GOOD",
+				"Id":                volUUID,
+				"Location":          driveUUID,
+				"LocationType":      "DRIVE",
+				"Mode":              "FS",
+				"NodeId":            driveNode,
+				"OperationalStatus": "OPERATIVE",
+				"Size":              size,
+				"StorageClass":      hddStorageType,
+				"Type":              ext4Fs,
+				"Usage":             "IN_USE",
 			},
 		},
 	}
-	return &vol
+	return &testVol
+}
+
+func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
+	e2elog.Logf("Wait vol status CREATED")
+	var csiStatus string
+	for start := time.Now(); time.Since(start) < time.Minute*5; time.Sleep(time.Second * 2) {
+		vols := getUObjList(f, common.VolumeGVR)
+		for _, el := range vols.Items {
+			testName, _, _ := unstructured.NestedString(el.UnstructuredContent(), "metadata", "name")
+			if testName == name {
+				csiStatus, _, _ = unstructured.NestedString(el.UnstructuredContent(), "spec", "CSIStatus")
+				break
+			}
+		}
+		e2elog.Logf("Wait vol status CREATED - now %s", csiStatus)
+		if csiStatus == "CREATED" {
+			break
+		}
+	}
+	return csiStatus == "CREATED"
 }
 
 // GetPersistentVolumeSource is implementation of PreprovisionedPVTestDriver interface method
@@ -311,8 +373,14 @@ func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string
 		CSI: &corev1.CSIPersistentVolumeSource{
 			Driver:       d.GetDriverInfo().Name,
 			ReadOnly:     readOnly,
-			VolumeHandle: "csi-baremetal",
-			FSType:       fsType,
+			VolumeHandle: volName,
+			VolumeAttributes: map[string]string{
+				"csi.storage.k8s.io/pv/name":       volName,
+				"csi.storage.k8s.io/pvc/namespace": namespace,
+				"fsType":                           ext4Fs,
+				"storageType":                      hddStorageType,
+			},
+			FSType: fsType,
 		},
 	}
 	return &pvSource, nil
