@@ -267,7 +267,6 @@ func (v *CSIVolume) DeleteVolume() {
 
 // CreateVolume is implementation of PreprovisionedPVTestDriver interface method
 func (d *baremetalDriver) CreateVolume(config *storageframework.PerTestConfig, volumeType storageframework.TestVolType) storageframework.TestVolume {
-	panic("implement me")
 	f := config.Framework
 	ns := f.Namespace.Name
 
