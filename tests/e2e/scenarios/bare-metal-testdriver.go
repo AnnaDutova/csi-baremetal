@@ -141,14 +141,14 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 
 	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
 	if pattern.VolType == storageframework.PreprovisionedPV {
-		if pattern.FsType == xfsFs || pattern.FsType == "" || pattern.FsType == ext3Fs {
-			e2eskipper.Skipf("Skip tests in CI already test for ext4 fs e -- skipping")
+		if pattern.FsType == xfsFs || pattern.FsType == ext3Fs || pattern.FsType == ext3Fs {
+			e2eskipper.Skipf("Skip tests in CI already test for default fs e -- skipping")
 		}
 	}
 
-	if pattern.VolType == storageframework.DynamicPV {
+	/*if pattern.VolType == storageframework.DynamicPV {
 		e2eskipper.Skipf("Skip tests for dynamicPV -- skipping")
-	}
+	}*/
 }
 
 // PrepareCSI deploys CSI and enables logging for containers
@@ -345,7 +345,7 @@ func constructVolume(drive unstructured.Unstructured, ns string) *unstructured.U
 				"OperationalStatus": "OPERATIVE",
 				"Size":              size,
 				"StorageClass":      hddStorageType,
-				"Type":              ext4Fs,
+				"Type":              "",
 				"Usage":             "IN_USE",
 			},
 		},
@@ -386,7 +386,7 @@ func (d *baremetalDriver) GetPersistentVolumeSource(readOnly bool, fsType string
 				VolumeAttributes: map[string]string{
 					"csi.storage.k8s.io/pv/name":       volName,
 					"csi.storage.k8s.io/pvc/namespace": namespace,
-					"fsType":                           ext4Fs,
+					"fsType":                           "",
 					"storageType":                      hddStorageType,
 				},
 				FSType: fsType,
