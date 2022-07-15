@@ -140,7 +140,7 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 	}
 
 	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
-	if pattern.VolType == storageframework.PreprovisionedPV && pattern.Name != "Pre-provisioned PV (ext4)" {
+	if pattern.VolType == storageframework.PreprovisionedPV /*&& pattern.Name != "Pre-provisioned PV (ext4)"*/ {
 		e2eskipper.Skipf("Skip PreprovisionedPV tests for this FSType -- skipping")
 	}
 }
