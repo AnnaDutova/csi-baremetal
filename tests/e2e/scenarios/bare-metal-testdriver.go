@@ -19,22 +19,21 @@ package scenarios
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	e2elog "k8s.io/kubernetes/test/e2e/framework/log"
 	"strings"
 	"time"
 
 	"github.com/dell/csi-baremetal-e2e-tests/e2e/common"
 
+	"github.com/google/uuid"
 	"github.com/onsi/ginkgo"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2eskipper "k8s.io/kubernetes/test/e2e/framework/skipper"
-	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
+	"k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 )
@@ -61,7 +60,7 @@ var (
 func initBaremetalDriverInfo(name string) storageframework.DriverInfo {
 	return storageframework.DriverInfo{
 		Name:               name,
-		SupportedSizeRange: e2evolume.SizeRange{Min: persistentVolumeClaimSize, Max: maxDriveSize},
+		SupportedSizeRange: volume.SizeRange{Min: persistentVolumeClaimSize, Max: maxDriveSize},
 		MaxFileSize:        storageframework.FileSizeSmall,
 		Capabilities: map[storageframework.Capability]bool{
 			storageframework.CapPersistence:         true,
@@ -140,10 +139,9 @@ func (d *baremetalDriver) SkipUnsupportedTest(pattern storageframework.TestPatte
 		e2eskipper.Skipf("Baremetal Driver does not support block volume mode with volume expansion - skipping")
 	}
 
-	// TODO https://github.com/dell/csi-baremetal/issues/666 - add test coverage
 	if pattern.VolType == storageframework.PreprovisionedPV {
 		if pattern.FsType == xfsFs || pattern.FsType == "" || pattern.FsType == ext3Fs {
-			e2eskipper.Skipf("Skip tests in CI already test for default fs e -- skipping")
+			e2eskipper.Skipf("Run PreprovisionedPV tests only for ext4  -- skipping")
 		}
 	}
 
@@ -334,7 +332,7 @@ func waitCreatedVolumeStatus(f *framework.Framework, name string) bool {
 				break
 			}
 		}
-		e2elog.Logf("Wait volume status CREATED, now %s", csiStatus)
+		framework.Logf("Volume status is %s, need - CREATED", csiStatus)
 		if csiStatus == "CREATED" {
 			return true
 		}
@@ -348,12 +346,10 @@ func foundAvailableDrive(f *framework.Framework) (string, string, int64) {
 
 	list := getUObjList(f, common.ACGVR)
 	for _, el := range list.Items {
-		e2elog.Logf("AC el - %s", el)
 		acLocation, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "Location")
 		acSize, _, _ := unstructured.NestedInt64(el.UnstructuredContent(), "spec", "Size")
-		e2elog.Logf("acLocation - %s", acLocation)
-		e2elog.Logf("acSize - %d", acSize)
 		if acSize >= defaultACSize {
+			framework.Logf("Found available capacity: Location - %s, Size - %d", acLocation, acSize)
 			driveUUID = acLocation
 			volumeSize = acSize
 			break
@@ -362,12 +358,10 @@ func foundAvailableDrive(f *framework.Framework) (string, string, int64) {
 
 	drives := getUObjList(f, common.DriveGVR)
 	for _, el := range drives.Items {
-		e2elog.Logf("Print drive - %s", el)
 		tempDriveUUID, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "UUID")
 		driveNode, _, _ := unstructured.NestedString(el.UnstructuredContent(), "spec", "NodeId")
-		e2elog.Logf("drive UUID - %s", tempDriveUUID)
-		e2elog.Logf("drive NodeID- %s", driveNode)
 		if tempDriveUUID == driveUUID {
+			framework.Logf("Drive %s is located on %s node", tempDriveUUID, driveNode)
 			driveNodeID = driveNode
 			break
 		}
